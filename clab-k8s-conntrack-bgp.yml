@@ -1,0 +1,88 @@
+name: k8s
+topology:
+  kinds:
+    linux:
+      cmd: bash
+  nodes:
+    ceos1:
+      kind: ceos
+      image: ceos:4.30.2F
+      startup-config: ./configs/ceos1.cfg
+    server0:
+      kind: linux
+      image: nicolaka/netshoot:latest
+      network-mode: container:clab-k8s-control-plane
+      exec:
+      - ip addr add 10.227.0.2/24 dev net0
+      - ip route replace default via 10.227.0.1
+    server1:
+      kind: linux
+      image: nicolaka/netshoot:latest
+      network-mode: container:clab-k8s-worker
+      exec:
+      - ip addr add 10.227.0.3/24 dev net0
+      - ip route replace default via 10.227.0.1
+    server2:
+      kind: linux
+      image: nicolaka/netshoot:latest
+      network-mode: container:clab-k8s-worker2
+      exec:
+      - ip addr add 10.227.0.4/24 dev net0
+      - ip route replace default via 10.227.0.1
+    server3:
+      kind: linux
+      image: nicolaka/netshoot:latest
+      network-mode: container:clab-k8s-worker3
+      exec:
+      - ip addr add 10.227.0.5/24 dev net0
+      - ip route replace default via 10.227.0.1
+    inthost1:
+      kind: linux
+      image: centos:8
+      exec:
+        - ip addr add 10.227.0.8/24 dev net0
+        - ip route replace default via 10.227.0.1
+    bgp1:
+      kind: linux
+      image: frrouting/frr:v7.5.1
+      exec:
+        - ip addr add 10.223.0.6/24 dev eth2
+        - ip addr add 10.224.0.1/24 dev eth3
+        - apk add openrc conntrack-tools conntrack-tools-openrc keepalived
+        - sysctl -w net.ipv4.ip_nonlocal_bind=1
+        - /usr/sbin/conntrackd  -d -C  /etc/conntrackd/conntrackd.conf 
+        - /usr/sbin/keepalived -f /etc/keepalived/keepalived.conf
+      binds:
+        - ./configs/bgp1_conntrackd.conf:/etc/conntrackd/conntrackd.conf
+        - ./configs/bgp1_daemons:/etc/frr/daemons
+        - ./configs/bgp1_frr.conf:/etc/frr/frr.conf
+        - ./configs/bgp1_keepalived.conf:/etc/keepalived/keepalived.conf
+    bgp2:
+      kind: linux
+      image: frrouting/frr:v7.5.1
+      exec:
+        - ip addr add 10.223.0.7/24 dev eth2
+        - ip addr add 10.224.0.2/24 dev eth3
+        - apk add openrc conntrack-tools conntrack-tools-openrc keepalived
+        - sysctl -w net.ipv4.ip_nonlocal_bind=1
+        - /usr/sbin/conntrackd  -d -C  /etc/conntrackd/conntrackd.conf 
+        - /usr/sbin/keepalived -f /etc/keepalived/keepalived.conf
+      binds:
+        - ./configs/bgp2_conntrackd.conf:/etc/conntrackd/conntrackd.conf
+        - ./configs/bgp2_daemons:/etc/frr/daemons
+        - ./configs/bgp2_frr.conf:/etc/frr/frr.conf
+        - ./configs/bgp1_keepalived.conf:/etc/keepalived/keepalived.conf
+
+  links:
+    - endpoints: ["ceos1:eth2","server0:net0"]
+    - endpoints: ["ceos1:eth3","server1:net0"]
+    - endpoints: ["ceos1:eth4","server2:net0"]
+    - endpoints: ["ceos1:eth5","server3:net0"]
+    - endpoints: ["ceos1:eth6","bgp1:eth1"]
+    - endpoints: ["ceos1:eth7","bgp2:eth1"]
+    - endpoints: ["ceos1:eth8","inthost1:net0"]
+    - endpoints: ["ceos1:eth9","bgp1:eth2"]
+    - endpoints: ["ceos1:eth10","bgp2:eth2"]
+    - endpoints: ["ceos1:eth11","bgp1:eth3"]
+    - endpoints: ["ceos1:eth12","bgp2:eth3"]
+
