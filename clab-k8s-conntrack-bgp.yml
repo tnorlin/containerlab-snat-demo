@@ -4,85 +4,198 @@ topology:
     linux:
       cmd: bash
   nodes:
-    ceos1:
+    intsw0:
       kind: ceos
       image: ceos:4.30.2F
-      startup-config: ./configs/ceos1.cfg
-    server0:
+      startup-config: ./conf.d/intsw0.cfg
+    peersw0:
+      kind: ceos
+      image: ceos:4.30.2F
+      startup-config: ./conf.d/peersw0.cfg
+    extsw0:
+      kind: ceos
+      image: ceos:4.30.2F
+      startup-config: ./conf.d/extsw0.cfg
+    inthost0:
       kind: linux
       image: nicolaka/netshoot:latest
       network-mode: container:clab-k8s-control-plane
       exec:
       - ip addr add 10.227.0.2/24 dev net0
-      - ip route replace default via 10.227.0.1
-    server1:
+      - ip route add 10.237.0.0/24 via 10.227.0.254
+    inthost1:
       kind: linux
       image: nicolaka/netshoot:latest
       network-mode: container:clab-k8s-worker
       exec:
       - ip addr add 10.227.0.3/24 dev net0
-      - ip route replace default via 10.227.0.1
-    server2:
+      - ip route add 10.237.0.0/24 via 10.227.0.254
+    inthost2:
       kind: linux
       image: nicolaka/netshoot:latest
       network-mode: container:clab-k8s-worker2
       exec:
       - ip addr add 10.227.0.4/24 dev net0
-      - ip route replace default via 10.227.0.1
-    server3:
+      - ip route add 10.237.0.0/24 via 10.227.0.254
+    inthost3:
       kind: linux
       image: nicolaka/netshoot:latest
       network-mode: container:clab-k8s-worker3
       exec:
       - ip addr add 10.227.0.5/24 dev net0
-      - ip route replace default via 10.227.0.1
-    inthost1:
+      - ip route add 10.237.0.0/24 via 10.227.0.254
+    inthost4:
       kind: linux
-      image: centos:8
+      image: nicolaka/netshoot:latest
+        #image: quay.io/quay/ubuntu:latest
       exec:
-        - ip addr add 10.227.0.8/24 dev net0
-        - ip route replace default via 10.227.0.1
-    bgp1:
+      - ip addr add 10.227.0.6/24 dev net0
+      - ip route add 10.237.0.0/24 via 10.227.0.254
+    exthost0:
       kind: linux
-      image: frrouting/frr:v7.5.1
+      image: nicolaka/netshoot:latest
+      network-mode: container:clab2-k8s-control-plane
       exec:
-        - ip addr add 10.223.0.6/24 dev eth2
+      - ip addr add 10.237.0.2/24 dev net0
+    exthost1:
+      kind: linux
+      image: nicolaka/netshoot:latest
+      network-mode: container:clab2-k8s-worker
+      exec:
+      - ip addr add 10.237.0.3/24 dev net0
+    exthost2:
+      kind: linux
+      image: nicolaka/netshoot:latest
+      network-mode: container:clab2-k8s-worker2
+      exec:
+      - ip addr add 10.237.0.4/24 dev net0
+    exthost3:
+      kind: linux
+      image: nicolaka/netshoot:latest
+      network-mode: container:clab2-k8s-worker3
+      exec:
+      - ip addr add 10.237.0.5/24 dev net0
+    exthost4:
+      kind: linux
+      image: quay.io/solo-io/echo-server
+      exec:
+      - ip addr add 10.237.0.8/24 dev net0
+      - ip route replace default via 10.237.0.253
+    extgw0:
+      kind: linux
+      image: frrouting/frr:v8.2.2
+      exec:
+        - ip addr add 10.237.0.254/24 dev eth1
+        - iptables-restore /etc/iptables.conf
+      binds:
+        - ./conf.d/extgw0_iptables.conf:/etc/iptables.conf
+    intbgp1:
+      kind: linux
+      image: quay.io/frrouting/frr:8.5.3
+      exec:
+        - ip addr add 10.223.0.1/24 dev eth2
         - ip addr add 10.224.0.1/24 dev eth3
         - apk add openrc conntrack-tools conntrack-tools-openrc keepalived
         - sysctl -w net.ipv4.ip_nonlocal_bind=1
+        - sysctl -w net.ipv4.ip_forward=1
+        - sed -i -e 's/bgpd=no/bgpd=yes/g' /etc/frr/daemons
+        - touch /etc/frr/vtysh.conf
         - /usr/sbin/conntrackd  -d -C  /etc/conntrackd/conntrackd.conf 
         - /usr/sbin/keepalived -f /etc/keepalived/keepalived.conf
+        #- iptables-restore /etc/iptables.conf
+        - iptables -t nat -A POSTROUTING -s 10.227.0.0/24 -o eth1 -j SNAT --to-source 10.227.0.254
+        - iptables -A FORWARD -m state --state RELATED -j ACCEPT
+        - iptables -A FORWARD -i eth4 -m state --state ESTABLISHED -j ACCEPT
+        - iptables -A FORWARD -i eth1 -m state --state ESTABLISHED -j ACCEPT
+        - /usr/lib/frr/frrinit.sh start
       binds:
-        - ./configs/bgp1_conntrackd.conf:/etc/conntrackd/conntrackd.conf
-        - ./configs/bgp1_daemons:/etc/frr/daemons
-        - ./configs/bgp1_frr.conf:/etc/frr/frr.conf
-        - ./configs/bgp1_keepalived.conf:/etc/keepalived/keepalived.conf
-    bgp2:
+        - ./conf.d/intbgp1_conntrackd.conf:/etc/conntrackd/conntrackd.conf
+        #- ./conf.d/intbgp1_daemons:/etc/frr/daemons
+        - ./conf.d/intbgp1_frr.conf:/etc/frr/frr.conf
+        - ./conf.d/intbgp1_keepalived.conf:/etc/keepalived/keepalived.conf
+        #- ./conf.d/vtysh.conf:/etc/frr/vtysh.conf
+        - ./conf.d/primary-backup.sh:/etc/conntrackd/primary-backup.sh
+        - ./conf.d/intbgp_iptables.conf:/etc/iptables.conf
+    intbgp2:
       kind: linux
-      image: frrouting/frr:v7.5.1
+      image: quay.io/frrouting/frr:8.5.3
       exec:
-        - ip addr add 10.223.0.7/24 dev eth2
+        - ip addr add 10.223.0.2/24 dev eth2
         - ip addr add 10.224.0.2/24 dev eth3
         - apk add openrc conntrack-tools conntrack-tools-openrc keepalived
         - sysctl -w net.ipv4.ip_nonlocal_bind=1
+        - sysctl -w net.ipv4.ip_forward=1
+        - sed -i -e 's/bgpd=no/bgpd=yes/g' /etc/frr/daemons
+        - touch /etc/frr/vtysh.conf
         - /usr/sbin/conntrackd  -d -C  /etc/conntrackd/conntrackd.conf 
         - /usr/sbin/keepalived -f /etc/keepalived/keepalived.conf
+        #- iptables-restore /etc/iptables.conf
+        - iptables -t nat -A POSTROUTING -s 10.227.0.0/24 -o eth1 -j SNAT --to-source 10.227.0.254
+        - iptables -A FORWARD -m state --state RELATED -j ACCEPT
+        - iptables -A FORWARD -i eth4 -m state --state ESTABLISHED -j ACCEPT
+        - iptables -A FORWARD -i eth1 -m state --state ESTABLISHED -j ACCEPT
+        - /usr/lib/frr/frrinit.sh start
       binds:
-        - ./configs/bgp2_conntrackd.conf:/etc/conntrackd/conntrackd.conf
-        - ./configs/bgp2_daemons:/etc/frr/daemons
-        - ./configs/bgp2_frr.conf:/etc/frr/frr.conf
-        - ./configs/bgp1_keepalived.conf:/etc/keepalived/keepalived.conf
-
+        - ./conf.d/intbgp2_conntrackd.conf:/etc/conntrackd/conntrackd.conf
+        #- ./conf.d/intbgp2_daemons:/etc/frr/daemons
+        - ./conf.d/intbgp2_frr.conf:/etc/frr/frr.conf
+        - ./conf.d/intbgp2_keepalived.conf:/etc/keepalived/keepalived.conf
+        #- ./conf.d/vtysh.conf:/etc/frr/vtysh.conf
+        - ./conf.d/primary-backup.sh:/etc/conntrackd/primary-backup.sh
+        - ./conf.d/intbgp_iptables.conf:/etc/iptables.conf
+    extbgp1:
+      kind: linux
+      image: quay.io/frrouting/frr:8.5.3
+      exec:
+        - ip addr add 10.237.0.251/24 dev eth2
+        - ip addr add 10.234.0.1/24 dev eth3
+        - sysctl -w net.ipv4.ip_nonlocal_bind=1
+        - sysctl -w net.ipv4.ip_forward=1
+        - touch /etc/frr/vtysh.conf
+        - sed -i -e 's/bgpd=no/bgpd=yes/g' /etc/frr/daemons
+        - /usr/lib/frr/frrinit.sh start
+      binds:
+        #- ./conf.d/extbgp1_daemons:/etc/frr/daemons
+        - ./conf.d/extbgp1_frr.conf:/etc/frr/frr.conf
+        #- ./conf.d/vtysh.conf:/etc/frr/vtysh.conf
+    extbgp2:
+      kind: linux
+      image: quay.io/frrouting/frr:8.5.3
+      exec:
+        - ip addr add 10.237.0.252/24 dev eth2
+        - ip addr add 10.234.0.2/24 dev eth3
+        - sysctl -w net.ipv4.ip_nonlocal_bind=1
+        - sysctl -w net.ipv4.ip_forward=1
+        - touch /etc/frr/vtysh.conf
+        - sed -i -e 's/bgpd=no/bgpd=yes/g' /etc/frr/daemons
+        - /usr/lib/frr/frrinit.sh start
+      binds:
+        #- ./conf.d/extbgp2_daemons:/etc/frr/daemons
+        - ./conf.d/extbgp2_frr.conf:/etc/frr/frr.conf
+        #- ./conf.d/vtysh.conf:/etc/frr/vtysh.conf
   links:
-    - endpoints: ["ceos1:eth2","server0:net0"]
-    - endpoints: ["ceos1:eth3","server1:net0"]
-    - endpoints: ["ceos1:eth4","server2:net0"]
-    - endpoints: ["ceos1:eth5","server3:net0"]
-    - endpoints: ["ceos1:eth6","bgp1:eth1"]
-    - endpoints: ["ceos1:eth7","bgp2:eth1"]
-    - endpoints: ["ceos1:eth8","inthost1:net0"]
-    - endpoints: ["ceos1:eth9","bgp1:eth2"]
-    - endpoints: ["ceos1:eth10","bgp2:eth2"]
-    - endpoints: ["ceos1:eth11","bgp1:eth3"]
-    - endpoints: ["ceos1:eth12","bgp2:eth3"]
-
+    - endpoints: ["intsw0:eth2","intbgp1:eth2"]
+    - endpoints: ["intsw0:eth3","intbgp1:eth3"]
+    - endpoints: ["intsw0:eth4","intbgp1:eth4"]
+    - endpoints: ["intsw0:eth5","intbgp2:eth2"]
+    - endpoints: ["intsw0:eth6","intbgp2:eth3"]
+    - endpoints: ["intsw0:eth7","intbgp2:eth4"]
+    - endpoints: ["intsw0:eth8","inthost0:net0"]
+    - endpoints: ["intsw0:eth9","inthost1:net0"]
+    - endpoints: ["intsw0:eth10","inthost2:net0"]
+    - endpoints: ["intsw0:eth11","inthost3:net0"]
+    - endpoints: ["intsw0:eth12","inthost4:net0"]
+    - endpoints: ["peersw0:eth2","intbgp1:eth1"]
+    - endpoints: ["peersw0:eth3","intbgp2:eth1"]
+    - endpoints: ["peersw0:eth4","extbgp1:eth1"]
+    - endpoints: ["peersw0:eth5","extbgp2:eth1"]
+    - endpoints: ["extsw0:eth2","extbgp1:eth2"]
+    - endpoints: ["extsw0:eth3","extbgp1:eth3"]
+    - endpoints: ["extsw0:eth4","extbgp2:eth2"]
+    - endpoints: ["extsw0:eth5","extbgp2:eth3"]
+    - endpoints: ["extsw0:eth6","exthost0:net0"]
+    - endpoints: ["extsw0:eth7","exthost1:net0"]
+    - endpoints: ["extsw0:eth8","exthost2:net0"]
+    - endpoints: ["extsw0:eth9","exthost3:net0"]
+    - endpoints: ["extsw0:eth10","exthost4:net0"]
+    - endpoints: ["extsw0:eth11","extgw0:eth1"]
