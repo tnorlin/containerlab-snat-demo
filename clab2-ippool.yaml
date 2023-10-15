@@ -1,0 +1,24 @@
+---
+apiVersion: "cilium.io/v2alpha1"
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: "worker-pool"
+spec:
+  cidrs:
+  - cidr: "10.235.1.0/24"
+---
+apiVersion: "cilium.io/v2alpha1"
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: "worker2-pool"
+spec:
+  cidrs:
+  - cidr: "10.235.2.0/24"
+---
+apiVersion: "cilium.io/v2alpha1"
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: "worker3-pool"
+spec:
+  cidrs:
+  - cidr: "10.235.3.0/24"
